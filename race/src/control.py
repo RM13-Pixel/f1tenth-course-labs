@@ -19,7 +19,7 @@ prev_error = 0.0
 # 25: Slow and steady
 # 35: Nice Autonomous Pace
 # > 40: Careful, what you do here. Only use this if your autonomous steering is very reliable.
-vel_input = 0.0	#TODO
+vel_input = 15.0	#TODO
 
 # Publisher for moving the car.
 # TODO: Use the coorect topic /car_x/offboard/command. The multiplexer listens to this topic
@@ -32,13 +32,28 @@ def control(data):
 	global kd
 	global angle = 0.0
 
+	error = data.pid_error
+
 	print("PID Control Node is Listening to error")
 
 	## Your PID code goes here
 	#TODO: Use kp, ki & kd to implement a PID controller
 
+	# error = setpoint - current_output
+    # self.integral = self.integral + error * self.dt
+    # derivative = (error - self.previous_error)/self.dt
+    # output = self.Kp*error + self.Ki*self.integral + self.Kd*derivative
+    # self.previous_error = error 
+
+
 	# 1. Scale the error
+
 	# 2. Apply the PID equation on error to compute steering
+	p_term = kp * error
+	i_term = ki * (i_term + error)
+	d_term = kd * (error - prev_error)
+
+	angle = p_term + i_term + d_term
 
 	# An empty AckermannDrive message is created. You will populate the steering_angle and the speed fields.
 	command = AckermannDrive()
