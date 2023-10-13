@@ -4,6 +4,7 @@ import rospy
 import math
 from sensor_msgs.msg import LaserScan
 from race.msg import pid_input
+import math
 
 # Some useful variable declarations.
 angle_range = 240	# Hokuyo 4LX has 240 degrees FoV for scan
@@ -44,6 +45,11 @@ def callback(data):
 	## Your code goes here to determine the projected error as per the alrorithm
 	# Compute Alpha, AB, and CD..and finally the error.
 	# TODO: implement
+	alpha = math.atan((a*math.cos(swing)-b)/(a*math.sin(swing)));
+	AB = (b*math.cos(alpha));
+    # CHANGE forward_projection variable above based on speed of car
+	CD = AB + forward_projection*math.sin(alpha);
+	error = desired_distance-CD;
 
 	msg = pid_input()	# An empty msg is created of the type pid_input
 	# this is the error that you want to send to the PID for steering correction.
