@@ -23,7 +23,13 @@ def getRange(data,angle):
     # Outputs length in meters to object with angle in lidar scan field of view
     # Make sure to take care of NaNs etc.
     #TODO: implement
-	return 0.0
+	angle_rad = math.radians(angle)
+
+	ind = (angle - data.angle_min) / data.angle_increment
+
+	range = data.ranges[ind]
+
+	return range
 
 
 
