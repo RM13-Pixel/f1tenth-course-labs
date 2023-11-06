@@ -4,7 +4,7 @@
 
   <!-- agent properties -->
   <arg         name           = 'car_name'
-               default        = 'car_9'/>
+               default        = 'car_1'/>
   <arg         name           = 'listen_offboard'
                default        = 'false'/>
 
