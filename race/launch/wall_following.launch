@@ -1,4 +1,10 @@
 <launch>
+  <!-- 60, 50 -->
+  <param name="kp" type="double" value="70" />
+  <param name="kd" type="double" value="90" />
+  <param name="ki" type="double" value="0" />
+  <param name="vel_input" type="double" value="45" />
+
   <node name="control" pkg="race" type="control.py" output="screen"/>
   <node name="dist" pkg="race" type="dist_finder.py" output="screen"/>
 </launch>
