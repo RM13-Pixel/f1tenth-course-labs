@@ -4,8 +4,10 @@ import rospy
 import math
 from sensor_msgs.msg import LaserScan
 from ackermann_msgs.msg import AckermannDrive
+import numpy as np
 
 command_pub = rospy.Publisher('/car_1/offboard/command', AckermannDrive, queue_size = 1)
+laser_pub = rospy.Publisher('/extended_laser', LaserScan, queue_size = 1)
 
 #! only for testing lidar values 
 def getRange(data, angle):
@@ -20,15 +22,20 @@ def getRange(data, angle):
     return dist
 
 def extendDisparities(rangeList, angle_increment):
-    halfCarWidth = 0.15
+    global threshold
+    halfCarWidth = 0.35
+
+    ranges = np.array(rangeList)
+
+    disparities = np.where(np.abs(np.diff(ranges)) > threshold)[0]
 
     ranges = rangeList
-    for i in range(len(ranges)-1):
-        if abs(ranges[i] - ranges[i+1]) > threshold:
-             
-            #* 2. For each pair of points around a disparity, pick the point at the closer distance. Calculate the number of LIDAR samples needed
-            #* to cover half the width of the car, plus some tolerance, at this distance.
-            if ranges[i] < ranges[i+1]:
+    new_ranges = ranges
+
+    print("++++++++++++++++++++++++++++++++++++++++++++")
+    print(disparities)
+    for i in disparities:
+        if ranges[i] < ranges[i+1] and ranges[i] != 0:
                 #! horizontal distance between two ranges = range * sin(angle difference) 
                 dist = ranges[i] * math.sin(angle_increment)
                 numSamples = int(math.ceil(halfCarWidth / dist))
@@ -37,20 +44,19 @@ def extendDisparities(rangeList, angle_increment):
                 #* with the closer distance. Do not overwrite any points that are already closer!
                 for j in range(numSamples):
                     if i+1+j < len(ranges):
-                        ranges[i+1+j] = ranges[i]
-
-
-            elif ranges[i+1] < ranges[i] and ranges[i+1] != 0:
+                        new_ranges[i+1+j] = ranges[i]
+        elif ranges[i+1] < ranges[i] and ranges[i+1] != 0:
                 #! horizontal distance between two ranges = range * sin(angle difference) 
                 dist = ranges[i+1] * math.sin(angle_increment)
                 numSamples = int(math.ceil(halfCarWidth / dist))
+                # print("Left: ",numSamples)
 
                 #* 3 (again). Starting at the more distant of the two points and continuing in the same direction, overwrite the number of samples in the array
                 #* with the closer distance. Do not overwrite any points that are already closer!
                 for j in range(numSamples):
                     if i-j > -1:
-                        ranges[i-j] = ranges[i+1]
-    return ranges
+                        new_ranges[i-j] = ranges[i+1]
+    return new_ranges
 
 def getMaxIndNaive(rangeList):
     maxRange = 0
@@ -135,20 +141,28 @@ def callback(data):
     ranges = list(data.ranges)
 
     #TODO NaNs?
-    ranges = [4 if math.isnan(x) else x for x in ranges] 
+    ranges = [10 if math.isnan(x) else x for x in ranges] 
+    ranges = [0 if x < 0.01 else x for x in ranges] 
 
     neg90 = 127 # RIGHT!
     pos90 = 639 # LEFT!
     total = 725
+    # print(ranges)
+    # ! remove values beyond 90 deg
+    ranges[:neg90-1] = [0] * (neg90 - 1)
+    ranges[pos90+1:] = [0] * (total - pos90 - 1)
 
     #* 2 and 3 in function 
     ranges = extendDisparities(ranges, data.angle_increment)
 
+    laser = LaserScan()
+    laser = data
+    laser.ranges = tuple(ranges)
+    laser_pub.publish(laser)
+
     #* 4. Search through these filtered distances corresponding to angles between -90 and +90 degrees (to make sure we don't identify
     #* a path behind the car).
-    # ! remove values beyond 90 deg
-    ranges[:neg90] = [0] * neg90
-    ranges[pos90:] = [0] * (total-pos90)
+    
     
     #* 5. Out of Order -- after 6
     #* 6. Here you can be creative and if there are multiple candidate gaps then you can choose the fatherst/deepest gap or the center of
@@ -158,8 +172,8 @@ def callback(data):
     # maxInd = closestStraight(ranges)
     # maxInd = findLargestGap(ranges)
     maxRange = ranges[maxInd]
-    print(maxInd)
-    print(maxRange)
+    # print(maxInd)
+    # print(maxRange)
 
     #* 5. Once you find the sample with the farthest distance in this range, calculate the corresponding angle--that's the direction you
     #* want to target.
@@ -170,6 +184,7 @@ def callback(data):
     command = AckermannDrive()
 
     angle_deg = math.degrees(angle)
+    # print(angle_deg)
 
     if angle_deg < -100:
         angle_deg = -100
