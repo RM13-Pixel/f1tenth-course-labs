@@ -8,7 +8,7 @@ from ackermann_msgs.msg import AckermannDrive
 command_pub = rospy.Publisher('/car_1/offboard/command', AckermannDrive, queue_size = 1)
 
 #! only for testing lidar values 
-def getRange(data,angle):
+def getRange(data, angle):
 
     angle_rad = math.radians(angle-90)
     ind = int((angle_rad - data.angle_min) / data.angle_increment)
@@ -19,19 +19,18 @@ def getRange(data,angle):
 
     return dist
 
-def extendDisparities(rangeList):
+def extendDisparities(rangeList, angle_increment):
     halfCarWidth = 0.15
 
     ranges = rangeList
     for i in range(len(ranges)-1):
         if abs(ranges[i] - ranges[i+1]) > threshold:
-            # print(i)
              
             #* 2. For each pair of points around a disparity, pick the point at the closer distance. Calculate the number of LIDAR samples needed
             #* to cover half the width of the car, plus some tolerance, at this distance.
-            if ranges[i] < ranges[i+1] and ranges[i] != 0:
+            if ranges[i] < ranges[i+1]:
                 #! horizontal distance between two ranges = range * sin(angle difference) 
-                dist = ranges[i] * math.sin(data.angle_increment)
+                dist = ranges[i] * math.sin(angle_increment)
                 numSamples = int(math.ceil(halfCarWidth / dist))
 
                 #* 3. Starting at the more distant of the two points and continuing in the same direction, overwrite the number of samples in the array
@@ -43,7 +42,7 @@ def extendDisparities(rangeList):
 
             elif ranges[i+1] < ranges[i] and ranges[i+1] != 0:
                 #! horizontal distance between two ranges = range * sin(angle difference) 
-                dist = ranges[i+1] * math.sin(data.angle_increment)
+                dist = ranges[i+1] * math.sin(angle_increment)
                 numSamples = int(math.ceil(halfCarWidth / dist))
 
                 #* 3 (again). Starting at the more distant of the two points and continuing in the same direction, overwrite the number of samples in the array
@@ -58,7 +57,7 @@ def getMaxIndNaive(rangeList):
     maxInd = -1
 
     # #TODO naive - maybe use idxmax
-    for i in range(len(ranges)):
+    for i in range(len(rangeList)):
         if rangeList[i] > maxRange:
             maxRange = rangeList[i]
             maxInd = i
@@ -66,6 +65,10 @@ def getMaxIndNaive(rangeList):
     return maxInd
 
 def closestStraight(rangeList):
+    neg90 = 127 # RIGHT!
+    pos90 = 639 # LEFT!
+    total = 725
+
     gaps2 = []
     max_dist = 0
     for i in range(neg90, pos90):
@@ -139,7 +142,7 @@ def callback(data):
     total = 725
 
     #* 2 and 3 in function 
-    ranges = extendDisparities(ranges)
+    ranges = extendDisparities(ranges, data.angle_increment)
 
     #* 4. Search through these filtered distances corresponding to angles between -90 and +90 degrees (to make sure we don't identify
     #* a path behind the car).
@@ -154,7 +157,6 @@ def callback(data):
     maxInd = getMaxIndNaive(ranges)
     # maxInd = closestStraight(ranges)
     # maxInd = findLargestGap(ranges)
-    
     maxRange = ranges[maxInd]
     print(maxInd)
     print(maxRange)
@@ -181,8 +183,6 @@ def callback(data):
     # speed = velocity + (1 * maxRange)
     speed = velocity
     command.speed = speed
-    # print(ranges[263])
-
 
     command_pub.publish(command)
     #* 8. We will move the obstacles around during the demo and the car should be able to avoid them.
