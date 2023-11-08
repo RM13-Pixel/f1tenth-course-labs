@@ -8,6 +8,7 @@ import numpy as np
 
 command_pub = rospy.Publisher('/car_1/offboard/command', AckermannDrive, queue_size = 1)
 laser_pub = rospy.Publisher('/extended_laser', LaserScan, queue_size = 1)
+gap_pub = rospy.Publisher('/gap_point', LaserScan, queue_size = 1)
 
 #! only for testing lidar values 
 def getRange(data, angle):
@@ -23,8 +24,8 @@ def getRange(data, angle):
 
 def extendDisparities(rangeList, angle_increment):
     global threshold
-    halfCarWidth = 0.35
-
+    halfCarWidth = 0.15
+    width_tolerance = .2
     ranges = np.array(rangeList)
 
     disparities = np.where(np.abs(np.diff(ranges)) > threshold)[0]
@@ -38,24 +39,30 @@ def extendDisparities(rangeList, angle_increment):
         if ranges[i] < ranges[i+1] and ranges[i] != 0:
                 #! horizontal distance between two ranges = range * sin(angle difference) 
                 dist = ranges[i] * math.sin(angle_increment)
-                numSamples = int(math.ceil(halfCarWidth / dist))
+                numSamples = int(math.ceil((halfCarWidth + width_tolerance) / dist))
 
                 #* 3. Starting at the more distant of the two points and continuing in the same direction, overwrite the number of samples in the array
                 #* with the closer distance. Do not overwrite any points that are already closer!
                 for j in range(numSamples):
                     if i+1+j < len(ranges):
+                        if new_ranges[i+1+j] < ranges[i]:
+                            break
                         new_ranges[i+1+j] = ranges[i]
+
         elif ranges[i+1] < ranges[i] and ranges[i+1] != 0:
                 #! horizontal distance between two ranges = range * sin(angle difference) 
                 dist = ranges[i+1] * math.sin(angle_increment)
-                numSamples = int(math.ceil(halfCarWidth / dist))
+                numSamples = int(math.ceil((halfCarWidth + width_tolerance) / dist))
                 # print("Left: ",numSamples)
 
                 #* 3 (again). Starting at the more distant of the two points and continuing in the same direction, overwrite the number of samples in the array
                 #* with the closer distance. Do not overwrite any points that are already closer!
                 for j in range(numSamples):
                     if i-j > -1:
+                        if new_ranges[i-j] < ranges[i+1]:
+                            break
                         new_ranges[i-j] = ranges[i+1]
+
     return new_ranges
 
 def getMaxIndNaive(rangeList):
@@ -68,6 +75,7 @@ def getMaxIndNaive(rangeList):
             maxRange = rangeList[i]
             maxInd = i
 
+    # print(maxInd)
     return maxInd
 
 def closestStraight(rangeList):
@@ -96,7 +104,11 @@ def closestStraight(rangeList):
 
     return maxInd
 
-def findLargestGap(rangeList):
+def findLargestGapOld(rangeList):
+    minDist = 1
+
+    rangeList = [0 if x < minDist else x for x in rangeList]
+
     maxSize = 0
     maxStart = None
 
@@ -121,7 +133,7 @@ def findLargestGap(rangeList):
 
     if maxStart != None:
         middle = maxStart + (maxSize-1) //  2
-        return middle
+        return middle, rangeList
     else:
         maxRange = -1
         maxInd = -1
@@ -129,7 +141,49 @@ def findLargestGap(rangeList):
             if rangeList[i] > maxRange:
                 maxRange = rangeList[i]
                 maxInd = i
-        return maxInd
+        return maxInd, rangeList
+
+def findLargestGapNew(rangeList):
+    rangeList = np.array(rangeList)
+    shoulderThreshold = 2
+
+    shoulderInds = np.where(rangeList < shoulderThreshold)
+    # print("shoulders",shoulderInds)
+    # print("shoulderLength",len(shoulderInds[0].tolist()))
+    # print("diff", np.diff(shoulderInds))
+    maxIndStart = np.argmax(np.diff(shoulderInds))
+
+    # max_ind_starts = np.argsort(np.diff(shoulderInds))[-2:]
+    # print("max ind starts: ", len(max_ind_starts[0]))
+    # print("max", maxIndStart)
+    # print(shoulderInds[0].tolist()[maxIndStart+1])
+
+    # gap1 = (shoulderInds[0].tolist()[max_ind_starts[0]] + shoulderInds[0].tolist()[max_ind_starts[0] + 1])/2
+    # gap2 = (shoulderInds[0].tolist()[max_ind_starts[1]] + shoulderInds[0].tolist()[max_ind_starts[1] + 1])/2
+    
+    # if rangeList[gap1] >= rangeList[gap2]:
+    #     return gap1
+    # else:
+    #     return gap2
+
+    idx = (shoulderInds[0].tolist()[maxIndStart] + shoulderInds[0].tolist()[maxIndStart + 1])/2
+
+    if rangeList[idx] < 1:
+        idx = 127 if rangeList[127]>rangeList[639] else 639
+
+    return idx
+
+
+def scale_vel(maxRange):
+    vel = 0
+    if maxRange > 2.8 and maxRange != 100:
+        vel = 33
+    elif 1.3 < maxRange < 2.8:
+        vel = 27
+    elif maxRange <1.3 or maxRange == 100:
+        vel = 20
+
+    return vel
 
 def callback(data):
     global threshold
@@ -141,12 +195,12 @@ def callback(data):
     ranges = list(data.ranges)
 
     #TODO NaNs?
-    ranges = [10 if math.isnan(x) else x for x in ranges] 
+    ranges = [100 if math.isnan(x) else x for x in ranges] 
     ranges = [0 if x < 0.01 else x for x in ranges] 
 
-    neg90 = 127 # RIGHT!
-    pos90 = 639 # LEFT!
-    total = 725
+    neg90 = 140 # RIGHT! 127
+    pos90 = 626 # LEFT! 639
+    total = 725 #725
     # print(ranges)
     # ! remove values beyond 90 deg
     ranges[:neg90-1] = [0] * (neg90 - 1)
@@ -168,21 +222,36 @@ def callback(data):
     #* 6. Here you can be creative and if there are multiple candidate gaps then you can choose the fatherst/deepest gap or the center of
     #* the widest gap. Try what works best
 
-    maxInd = getMaxIndNaive(ranges)
+    maxInd = findLargestGapNew(ranges)
+    # maxInd = getMaxIndNaive(ranges)
     # maxInd = closestStraight(ranges)
-    # maxInd = findLargestGap(ranges)
+
+    # ret = findLargestGapOld(ranges)
+    # maxInd = ret[0]
+    # zeroes = ret[1]
+
     maxRange = ranges[maxInd]
     # print(maxInd)
     # print(maxRange)
 
+    laserList = [0] * 725
+    laserList[maxInd] = 0.75
+    gap = LaserScan()
+    gap = data
+    gap.ranges = tuple(laserList)
+    gap_pub.publish(gap)
+
     #* 5. Once you find the sample with the farthest distance in this range, calculate the corresponding angle--that's the direction you
     #* want to target.
+
     angle = data.angle_min + (maxInd * data.angle_increment)
 
     #* 7. Actuate the car to move towards this goal point by publishing an `AckermannDrive message to the topic as you did for Wall
     #* Following - the same ranges for steering [-100,100] and velocity [0,100] apply.
     command = AckermannDrive()
-
+    # for i in ranges:
+    #     if i < 
+    # else:
     angle_deg = math.degrees(angle)
     # print(angle_deg)
 
@@ -191,13 +260,14 @@ def callback(data):
     elif angle_deg > 100:
         angle_deg = 100
 
-
+    print(angle_deg)
+    print("dist: ", maxRange)
     command.steering_angle = angle_deg
 
     #* choose speed based on distance
-    # speed = velocity + (1 * maxRange)
-    speed = velocity
-    command.speed = speed
+    velocity = scale_vel(maxRange)
+    print(velocity)
+    command.speed = velocity
 
     command_pub.publish(command)
     #* 8. We will move the obstacles around during the demo and the car should be able to avoid them.
