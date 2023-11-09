@@ -23,9 +23,9 @@ def getRange(data, angle):
     return dist
 
 def extendDisparities(rangeList, angle_increment):
-    global threshold
+    threshold = 0.1
     halfCarWidth = 0.15
-    width_tolerance = .2
+    width_tolerance = .15
     ranges = np.array(rangeList)
 
     disparities = np.where(np.abs(np.diff(ranges)) > threshold)[0]
@@ -33,8 +33,6 @@ def extendDisparities(rangeList, angle_increment):
     ranges = rangeList
     new_ranges = ranges
 
-    print("++++++++++++++++++++++++++++++++++++++++++++")
-    # print(disparities)
     for i in disparities:
         if ranges[i] < ranges[i+1] and ranges[i] != 0:
             #! horizontal distance between two ranges = range * sin(angle difference) 
@@ -115,8 +113,8 @@ def findLargestGap(rangeList):
 
     return idx
 
-def find_deepest_avg_gap(ranges):
-    ranges = np.array(ranges)
+def find_deepest_avg_gap(rangeList):
+    ranges = np.array(rangeList)
     shoulder_threshold = 2
     shoulder_inds = np.where(ranges < shoulder_threshold)
     # print(shoulder_inds)
@@ -138,11 +136,17 @@ def find_deepest_avg_gap(ranges):
 
         if(len(between_elements) > 0):
             # print("avg")
-            avg = np.mean(between_elements)
+            avg = np.mean(between_elements) * (end-start)
 
-            if avg > max_avg + 1:
+            if avg > max_avg + 140:
+
+                # print(avg-max_avg)
                 max_avg = avg
                 pair = (start, end)
+
+    if pair == (0,0):
+        maxInd = getMaxIndNaive(rangeList)
+        return (maxInd-1, maxInd+1)
         
     return pair
 
@@ -184,15 +188,13 @@ def bubble(rangeList):
 
 
 def callback(data):
-    global threshold
-    global velocity
-    
+    # print("_________________________________")
+
     #* 1.Take the raw array of Lidar samples. Find disparities in the Lidar readings. A disparity is two subsequent points in the
     #* array of distance values that differ by some amount larger than some predefined threshold. Threshold of 0.1m is a good starting
     #* point but try different values.
     ranges = list(data.ranges)
 
-    #TODO NaNs?
     ranges = [5 if math.isnan(x) else x for x in ranges] 
     ranges = [0 if x < 0.05 else x for x in ranges] 
     ranges = [x * 0.96 for x in ranges]
@@ -224,14 +226,12 @@ def callback(data):
     #* 6. Here you can be creative and if there are multiple candidate gaps then you can choose the fatherst/deepest gap or the center of
     #* the widest gap. Try what works best
 
-    maxInd = findLargestGap(ranges)
+    # maxInd = findLargestGap(ranges)
     # maxInd = getMaxIndNaive(ranges)
     # maxInd = getMaxIndCenter(ranges)
-    # maxInd = (find_deepest_avg_gap(ranges)[0] + find_deepest_avg_gap(ranges)[1])/2
+    maxInd = (find_deepest_avg_gap(ranges)[0] + find_deepest_avg_gap(ranges)[1])/2
 
     maxRange = ranges[maxInd]
-    # print(maxInd)
-    # print(maxRange)
 
     laserList = [0] * 725
     laserList[maxInd] = 0.75
@@ -248,28 +248,21 @@ def callback(data):
     #* 7. Actuate the car to move towards this goal point by publishing an `AckermannDrive message to the topic as you did for Wall
     #* Following - the same ranges for steering [-100,100] and velocity [0,100] apply.
     command = AckermannDrive()
-    # for i in ranges:
-    #     if i < 
-    # else:
     angle_deg = math.degrees(angle)
-    # print(angle_deg)
 
     if angle_deg < -100:
         angle_deg = -100
     elif angle_deg > 100:
         angle_deg = 100
 
-    print(angle_deg)
-    # print("dist: ", maxRange)
     command.steering_angle = angle_deg
 
     #* choose speed based on distance
-    velocity = scale_vel(maxRange)
-    # velocity = scale_vel(ranges[(383+maxInd)/2])
+    # velocity = scale_vel(maxRange)
+    velocity = scale_vel(ranges[(383+maxInd)/2])
     # velocity = scale_vel((ranges[maxInd] + ranges[383])/2)
-    # velocity = scale_vel_avg_dist(velocity, ranges)
+    # velocity = scale_vel_avg_dist(20, ranges)
 
-    # print(velocity)
     command.speed = velocity
 
     command_pub.publish(command)
@@ -279,10 +272,6 @@ def callback(data):
 
 if __name__ == '__main__':
 	print("Follow The Gap started")
-    
-	threshold = rospy.get_param("/threshold")
-	velocity = rospy.get_param("/velocity")
-
 
 	rospy.init_node('follow_gap',anonymous = True)
 
