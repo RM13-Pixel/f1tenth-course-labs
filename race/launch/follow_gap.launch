@@ -1,6 +1,3 @@
 <launch>
-  <param name="threshold" type="double" value="0.5" />
-  <param name="velocity" type="double" value="25" />
-
   <node name="follow_gap" pkg="race" type="follow_gap.py"/>
 </launch>
