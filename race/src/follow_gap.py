@@ -34,34 +34,34 @@ def extendDisparities(rangeList, angle_increment):
     new_ranges = ranges
 
     print("++++++++++++++++++++++++++++++++++++++++++++")
-    print(disparities)
+    # print(disparities)
     for i in disparities:
         if ranges[i] < ranges[i+1] and ranges[i] != 0:
-                #! horizontal distance between two ranges = range * sin(angle difference) 
-                dist = ranges[i] * math.sin(angle_increment)
-                numSamples = int(math.ceil((halfCarWidth + width_tolerance) / dist))
+            #! horizontal distance between two ranges = range * sin(angle difference) 
+            dist = ranges[i] * math.sin(angle_increment)
+            numSamples = int(math.ceil((halfCarWidth + width_tolerance) / dist))
 
-                #* 3. Starting at the more distant of the two points and continuing in the same direction, overwrite the number of samples in the array
-                #* with the closer distance. Do not overwrite any points that are already closer!
-                for j in range(numSamples):
-                    if i+1+j < len(ranges):
-                        if new_ranges[i+1+j] < ranges[i]:
-                            break
-                        new_ranges[i+1+j] = ranges[i]
+            #* 3. Starting at the more distant of the two points and continuing in the same direction, overwrite the number of samples in the array
+            #* with the closer distance. Do not overwrite any points that are already closer!
+            for j in range(numSamples):
+                if i+1+j < len(ranges):
+                    if new_ranges[i+1+j] < ranges[i]:
+                        break
+                    new_ranges[i+1+j] = ranges[i]
 
         elif ranges[i+1] < ranges[i] and ranges[i+1] != 0:
-                #! horizontal distance between two ranges = range * sin(angle difference) 
-                dist = ranges[i+1] * math.sin(angle_increment)
-                numSamples = int(math.ceil((halfCarWidth + width_tolerance) / dist))
-                # print("Left: ",numSamples)
+            #! horizontal distance between two ranges = range * sin(angle difference) 
+            dist = ranges[i+1] * math.sin(angle_increment)
+            numSamples = int(math.ceil((halfCarWidth + width_tolerance) / dist))
+            # print("Left: ",numSamples)
 
-                #* 3 (again). Starting at the more distant of the two points and continuing in the same direction, overwrite the number of samples in the array
-                #* with the closer distance. Do not overwrite any points that are already closer!
-                for j in range(numSamples):
-                    if i-j > -1:
-                        if new_ranges[i-j] < ranges[i+1]:
-                            break
-                        new_ranges[i-j] = ranges[i+1]
+            #* 3 (again). Starting at the more distant of the two points and continuing in the same direction, overwrite the number of samples in the array
+            #* with the closer distance. Do not overwrite any points that are already closer!
+            for j in range(numSamples):
+                if i-j > -1:
+                    if new_ranges[i-j] < ranges[i+1]:
+                        break
+                    new_ranges[i-j] = ranges[i+1]
 
     return new_ranges
 
@@ -78,93 +78,35 @@ def getMaxIndNaive(rangeList):
     # print(maxInd)
     return maxInd
 
-def closestStraight(rangeList):
-    neg90 = 127 # RIGHT!
-    pos90 = 639 # LEFT!
-    total = 725
+def getMaxIndCenter(rangeList):
+    maxRange = 0
+    maxInd = -1
 
-    gaps2 = []
-    max_dist = 0
-    for i in range(neg90, pos90):
-        if (rangeList[i] > max_dist):
-            max_dist = rangeList[i]
-            maxInd = i
-            if len(gaps2)<2:
-                gaps2.append((max_dist, maxInd))
-            else:
-                if abs(gaps2[0][0] > max_dist):
-                    gaps2[0] = (max_dist, maxInd)
-                else:
-                    gaps2[1] = (max_dist, maxInd)
+    threshold = 2
 
-    if gaps2[0][0] > gaps2[1][0]:
-        maxInd = gaps2[1][1]
-    else:
-        maxInd = gaps2[0][1]
-
-    return maxInd
-
-def findLargestGapOld(rangeList):
-    minDist = 1
-
-    rangeList = [0 if x < minDist else x for x in rangeList]
-
-    maxSize = 0
-    maxStart = None
-
-    currSize = 0
-    currStart = None
-
+    # #TODO naive - maybe use idxmax
     for i in range(len(rangeList)):
-        if rangeList[i] == 0:
-            if currSize > maxSize:
-                maxSize = currSize
-                maxStart = currStart
-            currSize = 0
-            currStart = None
-        else:
-            if currStart == None:
-                currStart = i
-            currSize += 1
+        if rangeList[i] > maxRange:
+            maxRange = rangeList[i]
+            maxInd = i
 
-    if currSize > maxSize:
-                maxSize = currSize
-                maxStart = currStart
+    leftInd = maxInd
+    while rangeList[leftInd] > threshold and leftInd > 0:
+        leftInd -= 1
 
-    if maxStart != None:
-        middle = maxStart + (maxSize-1) //  2
-        return middle, rangeList
-    else:
-        maxRange = -1
-        maxInd = -1
-        for i in range(len(rangeList)):
-            if rangeList[i] > maxRange:
-                maxRange = rangeList[i]
-                maxInd = i
-        return maxInd, rangeList
+    rightInd = maxInd
+    while rangeList[rightInd] > threshold and rightInd < len(rangeList):
+        rightInd += 1
 
-def findLargestGapNew(rangeList):
+    # print(maxInd)
+    return (rightInd + leftInd)/2
+
+def findLargestGap(rangeList):
     rangeList = np.array(rangeList)
     shoulderThreshold = 2
-
     shoulderInds = np.where(rangeList < shoulderThreshold)
-    # print("shoulders",shoulderInds)
-    # print("shoulderLength",len(shoulderInds[0].tolist()))
-    # print("diff", np.diff(shoulderInds))
-    maxIndStart = np.argmax(np.diff(shoulderInds))
-
-    # max_ind_starts = np.argsort(np.diff(shoulderInds))[-2:]
-    # print("max ind starts: ", len(max_ind_starts[0]))
-    # print("max", maxIndStart)
-    # print(shoulderInds[0].tolist()[maxIndStart+1])
-
-    # gap1 = (shoulderInds[0].tolist()[max_ind_starts[0]] + shoulderInds[0].tolist()[max_ind_starts[0] + 1])/2
-    # gap2 = (shoulderInds[0].tolist()[max_ind_starts[1]] + shoulderInds[0].tolist()[max_ind_starts[1] + 1])/2
     
-    # if rangeList[gap1] >= rangeList[gap2]:
-    #     return gap1
-    # else:
-    #     return gap2
+    maxIndStart = np.argmax(np.diff(shoulderInds))
 
     idx = (shoulderInds[0].tolist()[maxIndStart] + shoulderInds[0].tolist()[maxIndStart + 1])/2
 
@@ -173,33 +115,91 @@ def findLargestGapNew(rangeList):
 
     return idx
 
+def find_deepest_avg_gap(ranges):
+    ranges = np.array(ranges)
+    shoulder_threshold = 2
+    shoulder_inds = np.where(ranges < shoulder_threshold)
+    # print(shoulder_inds)
+    # for i in range(len(shoulder_inds)-1):
+    #     dists = np.array
+    #     dist = shoulder_inds[i]
+    #     while dist<shoulder_inds[i+1]:
+    #         dists.append(dist)
+
+    # shoulders = np.where(ranges > shoulder_threshold)[0]
+    max_avg = 0
+    pair = (0,0)
+    shoulder_inds = shoulder_inds[0].tolist()
+    for i in range(len(shoulder_inds) - 1):
+        # print("range")
+        start = shoulder_inds[i]
+        end = shoulder_inds[i+1]
+        between_elements = ranges[start+1:end]
+
+        if(len(between_elements) > 0):
+            # print("avg")
+            avg = np.mean(between_elements)
+
+            if avg > max_avg + 1:
+                max_avg = avg
+                pair = (start, end)
+        
+    return pair
 
 def scale_vel(maxRange):
     vel = 0
-    if maxRange > 2.8 and maxRange != 100:
-        vel = 33
+    if maxRange > 2.8:
+        vel = 30
     elif 1.3 < maxRange < 2.8:
-        vel = 27
-    elif maxRange <1.3 or maxRange == 100:
         vel = 20
+    elif maxRange <1.3:
+        vel = 15
 
     return vel
+
+def scale_vel_avg_dist(velocity, ranges):
+    ranges = np.array(ranges)
+    avg_dist = np.mean(ranges)
+    print("mean: ", avg_dist)
+
+    velocity -= 3/avg_dist
+
+    print(velocity)
+    velocity = 35 if velocity>35 else velocity
+    velocity = 25 if velocity<25 else velocity
+    
+    return velocity
+
+def bubble(rangeList):
+    minInd = np.argmin(rangeList)
+    newRanges = rangeList
+
+    for i in range(100):
+        if minInd - i < 0 or minInd + i >= len(rangeList):
+            break
+        newRanges[minInd - i] = 0
+        newRanges[minInd + i] = 0
+
+    return newRanges
+
 
 def callback(data):
     global threshold
     global velocity
-
+    
     #* 1.Take the raw array of Lidar samples. Find disparities in the Lidar readings. A disparity is two subsequent points in the
     #* array of distance values that differ by some amount larger than some predefined threshold. Threshold of 0.1m is a good starting
     #* point but try different values.
     ranges = list(data.ranges)
 
     #TODO NaNs?
-    ranges = [100 if math.isnan(x) else x for x in ranges] 
-    ranges = [0 if x < 0.01 else x for x in ranges] 
+    ranges = [5 if math.isnan(x) else x for x in ranges] 
+    ranges = [0 if x < 0.05 else x for x in ranges] 
+    ranges = [x * 0.96 for x in ranges]
+    # ranges = [x - 0.05 for x in ranges]
 
-    neg90 = 140 # RIGHT! 127
-    pos90 = 626 # LEFT! 639
+    neg90 = 127 # RIGHT! 127
+    pos90 = 639 # LEFT! 639
     total = 725 #725
     # print(ranges)
     # ! remove values beyond 90 deg
@@ -208,6 +208,8 @@ def callback(data):
 
     #* 2 and 3 in function 
     ranges = extendDisparities(ranges, data.angle_increment)
+
+    # ranges = bubble(ranges)
 
     laser = LaserScan()
     laser = data
@@ -222,13 +224,10 @@ def callback(data):
     #* 6. Here you can be creative and if there are multiple candidate gaps then you can choose the fatherst/deepest gap or the center of
     #* the widest gap. Try what works best
 
-    maxInd = findLargestGapNew(ranges)
+    maxInd = findLargestGap(ranges)
     # maxInd = getMaxIndNaive(ranges)
-    # maxInd = closestStraight(ranges)
-
-    # ret = findLargestGapOld(ranges)
-    # maxInd = ret[0]
-    # zeroes = ret[1]
+    # maxInd = getMaxIndCenter(ranges)
+    # maxInd = (find_deepest_avg_gap(ranges)[0] + find_deepest_avg_gap(ranges)[1])/2
 
     maxRange = ranges[maxInd]
     # print(maxInd)
@@ -261,12 +260,16 @@ def callback(data):
         angle_deg = 100
 
     print(angle_deg)
-    print("dist: ", maxRange)
+    # print("dist: ", maxRange)
     command.steering_angle = angle_deg
 
     #* choose speed based on distance
     velocity = scale_vel(maxRange)
-    print(velocity)
+    # velocity = scale_vel(ranges[(383+maxInd)/2])
+    # velocity = scale_vel((ranges[maxInd] + ranges[383])/2)
+    # velocity = scale_vel_avg_dist(velocity, ranges)
+
+    # print(velocity)
     command.speed = velocity
 
     command_pub.publish(command)
