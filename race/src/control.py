@@ -3,14 +3,10 @@ import math
 import rospy
 from race.msg import pid_input
 from ackermann_msgs.msg import AckermannDrive
+from sensor_msgs.msg import Joy
 
-# PID Control Params
-kp = 0.0 #TODO
-kd = 0.0 #TODO
-ki = 0.0 #TODO
-servo_offset = 0.0	# zero correction offset in case servo is misaligned and has a bias in turning.
+servo_offset = 13.5	# zero correction offset in case servo is misaligned and has a bias in turning.
 prev_error = 0.0
-
 
 # This code can input desired velocity from the user.
 # velocity must be between [0,100] to move forward.
@@ -19,66 +15,83 @@ prev_error = 0.0
 # 25: Slow and steady
 # 35: Nice Autonomous Pace
 # > 40: Careful, what you do here. Only use this if your autonomous steering is very reliable.
-vel_input = 15.0	#TODO
+# Velocity set in rosparams
 
 # Publisher for moving the car.
-# TODO: Use the coorect topic /car_x/offboard/command. The multiplexer listens to this topic
-command_pub = rospy.Publisher('/car_9/offboard/command', AckermannDrive, queue_size = 1)
+command_pub = rospy.Publisher('/car_1/offboard/command', AckermannDrive, queue_size = 1)
 
 def control(data):
 	global prev_error
 	global vel_input
+	global vel
 	global kp
 	global kd
-	global angle = 0.0
+	global angle
+	global angle_deg
+	global integral
 
 	error = data.pid_error
 
-	print("PID Control Node is Listening to error")
+	if math.isnan(error):
+		command = AckermannDrive()
+		command.speed = vel
+		command.steering_angle = 0
+		command_pub.publish(command)
+		return
 
 	## Your PID code goes here
-	#TODO: Use kp, ki & kd to implement a PID controller
-
-	# error = setpoint - current_output
-    # self.integral = self.integral + error * self.dt
-    # derivative = (error - self.previous_error)/self.dt
-    # output = self.Kp*error + self.Ki*self.integral + self.Kd*derivative
-    # self.previous_error = error 
-
 
 	# 1. Scale the error
 
 	# 2. Apply the PID equation on error to compute steering
 	p_term = kp * error
-	i_term = ki * (i_term + error)
+	integral += error
+	i_term = ki * integral
 	d_term = kd * (error - prev_error)
 
-	angle = p_term + i_term + d_term
+	pid = p_term + d_term
+
+	prev_error = error
 
 	# An empty AckermannDrive message is created. You will populate the steering_angle and the speed fields.
 	command = AckermannDrive()
+	angle = pid
+	angle_deg = angle
 
-	# TODO: Make sure the steering value is within bounds [-100,100]
-	command.steering_angle = angle
+	if angle_deg < -100:
+		angle_deg = -100
+	elif angle_deg > 100:
+		angle_deg = 100
+	else:
+		pass
 
-	# TODO: Make sure the velocity is within bounds [0,100]
-	command.speed = vel_input
+	command.steering_angle = angle_deg
 
-	# Move the car autonomously
+	vel = vel_input - ( (10 * abs(error)) - 5 * (error-prev_error) )
+
+	if vel < 25:
+		vel = 25
+
+	if vel > 55:
+		vel = 55
+	command.speed = vel
+
 	command_pub.publish(command)
 
 if __name__ == '__main__':
 
-    # This code tempalte asks for the values for the gains from the user upon start, but you are free to set them as ROS parameters as well.
-	global kp
-	global kd
-	global ki
-	global vel_input
-	kp = input("Enter Kp Value: ")
-	kd = input("Enter Kd Value: ")
-	ki = input("Enter Ki Value: ")
-	vel_input = input("Enter desired velocity: ")
+	kp = rospy.get_param("/kp")
+	kd = rospy.get_param("/kd")
+	ki = rospy.get_param("/ki")
+	vel_input = rospy.get_param("/vel_input")
+	vel = vel_input
+
+	angle_deg = 0
+
+	integral = 0
+
 	rospy.init_node('pid_controller', anonymous=True)
-    # subscribe to the error topic
+
 	rospy.Subscriber("error", pid_input, control)
+
 	rospy.spin()

@@ -1,0 +1,3 @@
+<launch>
+  <node name="follow_gap" pkg="race" type="follow_gap.py" output="screen"/>
+</launch>
