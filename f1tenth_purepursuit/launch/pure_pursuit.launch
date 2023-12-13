@@ -1,0 +1,12 @@
+<launch>
+
+  <!-- <include file="$(find move_base)/launch/move_base.launch"/> -->
+  <include file="$(find particle_filter)/launch/slam.launch"/>
+  <include file="$(find race)/launch/follow_gap.launch"/>
+  
+  <param name="car_name" type="str" value="car_1" />
+  <param name="trajectory_name" type="str" value="this_better_work" />
+  <!-- <param name="trajectory_name" type="str" value="smooth_raceline_newest" /> -->
+  <node name="purepursuit" pkg="f1tenth_purepursuit" type="pure_pursuit1.py" output="screen"/>
+  <!-- <node name="purepursuit" pkg="f1tenth_purepursuit" type="pure_pursuit2.py" output="screen"/> -->
+</launch>
